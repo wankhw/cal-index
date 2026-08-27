@@ -46,16 +46,6 @@ function layoutMarket(entries: Entry[]): MarketEntry[] {
   return result
 }
 
-function seedEntries(): Entry[] {
-  const date = dateKey()
-  return [
-    { id: 1, date, type: 'intake', name: '早餐', calories: 420, createdAt: 1 },
-    { id: 2, date, type: 'intake', name: '午餐', calories: 680, createdAt: 2 },
-    { id: 3, date, type: 'intake', name: '拿铁', calories: 190, createdAt: 3 },
-    { id: 4, date, type: 'exercise', name: '快走 5km', calories: 320, createdAt: 4 }
-  ]
-}
-
 export default function Index () {
   const [entries, setEntries] = useState<Entry[]>([])
   const [settings, setSettings] = useState<Settings>(defaults)
@@ -69,11 +59,9 @@ export default function Index () {
 
   useDidShow(() => {
     const saved = Taro.getStorageSync<Entry[]>(ENTRY_KEY)
-    const nextEntries = Array.isArray(saved) && saved.length ? saved : seedEntries()
     const savedSettings = Taro.getStorageSync<Settings>(SETTINGS_KEY)
-    setEntries(nextEntries)
+    setEntries(Array.isArray(saved) ? saved : [])
     setSettings(savedSettings?.bmr ? savedSettings : defaults)
-    if (!saved?.length) Taro.setStorageSync(ENTRY_KEY, nextEntries)
   })
 
   const summary = useMemo(() => summarizeDay(today, entries, settings.bmr), [today, entries, settings.bmr])
