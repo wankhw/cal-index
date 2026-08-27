@@ -70,7 +70,7 @@ export default function Index () {
     })
   }
 
-  return <ScrollView scrollY className='page'>
+  return <View className='screen'><ScrollView scrollY className='page'>
     <View className='header'><View><Text className='brand'>CAL·INDEX</Text><Text className='date'>{today.replace(/-/g, ' / ')}</Text></View><View className='streak'><Text>ϟ 热量账户</Text><Text className='muted'>数据仅保存在本机</Text></View></View>
     <View className={`ticker ${good ? 'good' : ''}`}><View><Text className='label'>当日热量余额</Text><Text className='balance'>{signed(summary.balance)} <Text>kcal</Text></Text></View><View className='target'><Text className='label'>目标</Text><Text>−{settings.deficitTarget} kcal</Text><Text className='badge'>{good ? `超额 ${Math.abs(remaining)}` : `还差 ${Math.max(0, remaining)}`} kcal</Text></View></View>
     <View className='tabs'>{([['market', '今日大盘'], ['kline', 'K线走势'], ['month', '月度日历']] as const).map(([key, label]) => <Button key={key} className={view === key ? 'active' : ''} onClick={() => setView(key)}>{label}</Button>)}</View>
@@ -86,9 +86,10 @@ export default function Index () {
     {view === 'kline' && <Kline candles={candles} period={period} setPeriod={setPeriod} />}
     {view === 'month' && <Month entries={entries} settings={settings} />}
 
-    <Button className='add' onClick={() => setShowForm(true)}>＋</Button>
-    {showForm && <View className='overlay' onClick={() => setShowForm(false)}><View className='form' onClick={(event) => event.stopPropagation()}><View className='form-head'><View><Text>新增流水</Text><Text className='muted'>记下今天的一笔热量交易</Text></View><Button onClick={() => setShowForm(false)}>×</Button></View><View className='type-tabs'><Button className={formType === 'intake' ? 'active' : ''} onClick={() => setFormType('intake')}>摄入</Button><Button className={formType === 'exercise' ? 'active' : ''} onClick={() => setFormType('exercise')}>运动消耗</Button></View><Text className='input-label'>项目名称</Text><Input value={name} onInput={(event) => setName(event.detail.value)} placeholder='例如：鸡胸沙拉' maxlength={18} /><Text className='input-label'>热量 kcal</Text><Input value={calories} onInput={(event) => setCalories(event.detail.value)} placeholder='320' type='number' /><Button className='submit' onClick={addEntry}>确认入账</Button></View></View>}
   </ScrollView>
+  <Button className='add' onClick={() => setShowForm(true)}>＋</Button>
+  {showForm && <View className='overlay' onClick={() => setShowForm(false)}><View className='form' onClick={(event) => event.stopPropagation()}><View className='form-head'><View><Text>新增流水</Text><Text className='muted'>记下今天的一笔热量交易</Text></View><Button onClick={() => setShowForm(false)}>×</Button></View><View className='type-tabs'><Button className={formType === 'intake' ? 'active' : ''} onClick={() => setFormType('intake')}>摄入</Button><Button className={formType === 'exercise' ? 'active' : ''} onClick={() => setFormType('exercise')}>运动消耗</Button></View><Text className='input-label'>项目名称</Text><Input value={name} onInput={(event) => setName(event.detail.value)} placeholder='例如：鸡胸沙拉' maxlength={18} /><Text className='input-label'>热量 kcal</Text><Input value={calories} onInput={(event) => setCalories(event.detail.value)} placeholder='320' type='number' /><Button className='submit' onClick={addEntry}>确认入账</Button></View></View>}
+  </View>
 }
 
 function Kline({ candles, period, setPeriod }: { candles: ReturnType<typeof buildCandles>; period: CandlePeriod; setPeriod: (period: CandlePeriod) => void }) {
