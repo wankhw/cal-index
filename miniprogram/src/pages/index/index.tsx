@@ -9,6 +9,43 @@ const ENTRY_KEY = 'cal-index-entries'
 const SETTINGS_KEY = 'cal-index-settings'
 const defaults: Settings = { bmr: 1650, deficitTarget: 500 }
 
+type MarketEntry = Entry & { left: number; top: number; width: number; height: number }
+
+function layoutMarket(entries: Entry[]): MarketEntry[] {
+  const sorted = [...entries].sort((a, b) => b.calories - a.calories)
+  const result: MarketEntry[] = []
+
+  function split(items: Entry[], left: number, top: number, width: number, height: number) {
+    if (items.length === 1) {
+      result.push({ ...items[0], left, top, width, height })
+      return
+    }
+    const total = items.reduce((sum, item) => sum + item.calories, 0)
+    let running = 0
+    let splitAt = 1
+    let closest = Infinity
+    for (let index = 1; index < items.length; index++) {
+      running += items[index - 1].calories
+      const distance = Math.abs(total / 2 - running)
+      if (distance < closest) { closest = distance; splitAt = index }
+    }
+    const first = items.slice(0, splitAt)
+    const second = items.slice(splitAt)
+    const firstTotal = first.reduce((sum, item) => sum + item.calories, 0)
+    const ratio = firstTotal / total
+    if (width >= height) {
+      split(first, left, top, width * ratio, height)
+      split(second, left + width * ratio, top, width * (1 - ratio), height)
+    } else {
+      split(first, left, top, width, height * ratio)
+      split(second, left, top + height * ratio, width, height * (1 - ratio))
+    }
+  }
+
+  if (sorted.length) split(sorted, 0, 0, 100, 100)
+  return result
+}
+
 function seedEntries(): Entry[] {
   const date = dateKey()
   return [
@@ -42,6 +79,7 @@ export default function Index () {
   const summary = useMemo(() => summarizeDay(today, entries, settings.bmr), [today, entries, settings.bmr])
   const daily = useMemo(() => entries.filter((entry) => entry.date === today), [entries, today])
   const candles = useMemo(() => buildCandles(entries, settings.bmr, period), [entries, settings.bmr, period])
+  const market = useMemo(() => layoutMarket([...daily, { id: -1, date: today, type: 'exercise', name: '基础代谢', calories: settings.bmr, createdAt: 0 }]), [daily, settings.bmr, today])
   const good = summary.balance <= -settings.deficitTarget
   const remaining = summary.balance + settings.deficitTarget
 
@@ -76,10 +114,7 @@ export default function Index () {
     <View className='tabs'>{([['market', '今日大盘'], ['kline', 'K线走势'], ['month', '月度日历']] as const).map(([key, label]) => <Button key={key} className={view === key ? 'active' : ''} onClick={() => setView(key)}>{label}</Button>)}</View>
 
     {view === 'market' && <>
-      <View className='market-card'><View className='blocks'>{[...daily, { id: -1, date: today, type: 'exercise' as const, name: '基础代谢', calories: settings.bmr, createdAt: 0 }].sort((a, b) => b.calories - a.calories).map((entry) => {
-        const ratio = Math.max(27, Math.min(100, entry.calories / (summary.intake + summary.expenditure) * 170))
-        return <View key={entry.id} className={`block ${entry.type}`} style={{ flexBasis: `${ratio}%`, minHeight: `${Math.max(120, ratio * 2.3)}rpx` }}><Text>{entry.name}</Text><Text>{entry.type === 'intake' ? '+' : '−'}{entry.calories} kcal</Text></View>
-      })}</View><View className='legend'><Text>■ 摄入 {summary.intake}</Text><Text>■ 消耗 {summary.expenditure}</Text><Text>面积≈热量</Text></View></View>
+      <View className='market-card'><View className='blocks'>{market.map((entry) => <View key={entry.id} className={`block ${entry.type}`} style={{ left: `${entry.left}%`, top: `${entry.top}%`, width: `${entry.width}%`, height: `${entry.height}%` }}><Text>{entry.name}</Text><Text>{entry.type === 'intake' ? '+' : '−'}{entry.calories} kcal</Text></View>)}</View><View className='legend'><Text>■ 摄入 {summary.intake}</Text><Text>■ 消耗 {summary.expenditure}</Text><Text>面积＝热量占比</Text></View></View>
       <View className='ledger-head'><View><Text>当日流水</Text><Text className='muted'>{daily.length} 笔记录</Text></View><Button onClick={editSettings}>参数设置</Button></View>
       {daily.map((entry) => <View className='entry' key={entry.id} onLongPress={() => removeEntry(entry)}><View className={`mark ${entry.type}`} /><View className='entry-name'><Text>{entry.name}</Text><Text className='muted'>{entry.type === 'intake' ? '摄入' : '运动消耗'} · 长按删除</Text></View><Text className={entry.type}>{entry.type === 'intake' ? '+' : '−'}{entry.calories}</Text></View>)}
     </>}
