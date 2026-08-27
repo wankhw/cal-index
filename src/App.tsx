@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import ReactEChartsCore from 'echarts-for-react/lib/core'
 import * as echarts from 'echarts/core'
-import { TreemapChart } from 'echarts/charts'
-import { TooltipComponent } from 'echarts/components'
+import { CandlestickChart, TreemapChart } from 'echarts/charts'
+import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { addDays, endOfMonth, format, isToday, parseISO, startOfMonth } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
-import { calculateStreak, summarizeDay, summarizeRange } from './calculations'
+import { buildCandles, calculateStreak, summarizeDay, summarizeRange } from './calculations'
 import { db, defaultSettings } from './db'
-import type { Entry, EntryType, Settings } from './types'
+import type { CalorieCandle, CandlePeriod, Entry, EntryType, Settings } from './types'
 
-echarts.use([TreemapChart, TooltipComponent, CanvasRenderer])
+echarts.use([TreemapChart, CandlestickChart, TooltipComponent, GridComponent, DataZoomComponent, CanvasRenderer])
 
-type View = 'day' | 'month'
+type View = 'day' | 'trend' | 'month'
 type Dialog = 'entry' | 'settings' | null
 
 const DEMO_ENTRIES: Omit<Entry, 'id'>[] = [
@@ -32,6 +32,7 @@ function App() {
   const [settings, setSettings] = useState<Settings>(defaultSettings)
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [view, setView] = useState<View>('day')
+  const [candlePeriod, setCandlePeriod] = useState<CandlePeriod>('day')
   const [dialog, setDialog] = useState<Dialog>(null)
   const [editing, setEditing] = useState<Entry | null>(null)
   const [ready, setReady] = useState(false)
@@ -108,6 +109,14 @@ function App() {
     return summarizeRange(startOfMonth(date), endOfMonth(date), entries, settings.bmr)
   }, [selectedDate, entries, settings.bmr])
 
+  const candleDays = useMemo(() => {
+    if (!entries.length) return []
+    const earliest = entries.reduce((min, entry) => entry.date < min ? entry.date : min, entries[0].date)
+    return summarizeRange(parseISO(earliest), parseISO(today), entries, settings.bmr)
+  }, [entries, settings.bmr, today])
+
+  const candles = useMemo(() => buildCandles(candleDays, candlePeriod), [candleDays, candlePeriod])
+
   async function saveEntry(form: FormData) {
     const name = String(form.get('name') ?? '').trim()
     const calories = Number(form.get('calories'))
@@ -159,7 +168,8 @@ function App() {
 
       <nav className="view-tabs" aria-label="视图切换">
         <button className={view === 'day' ? 'active' : ''} onClick={() => setView('day')}>今日大盘</button>
-        <button className={view === 'month' ? 'active' : ''} onClick={() => setView('month')}>月度行情</button>
+        <button className={view === 'trend' ? 'active' : ''} onClick={() => setView('trend')}>K线走势</button>
+        <button className={view === 'month' ? 'active' : ''} onClick={() => setView('month')}>月度日历</button>
       </nav>
 
       {view === 'day' ? (
@@ -181,6 +191,8 @@ function App() {
             ))}
           </section>
         </>
+      ) : view === 'trend' ? (
+        <KLineView candles={candles} period={candlePeriod} onPeriodChange={setCandlePeriod} />
       ) : (
         <MonthView days={monthDays} target={settings.deficitTarget} onSelect={(date) => { setSelectedDate(date); setView('day') }} />
       )}
@@ -197,6 +209,69 @@ function App() {
       {dialog === 'settings' && <SettingsDialog settings={settings} onClose={() => setDialog(null)} onSave={saveSettings} />}
     </main>
   )
+}
+
+function KLineView({ candles, period, onPeriodChange }: { candles: CalorieCandle[]; period: CandlePeriod; onPeriodChange: (period: CandlePeriod) => void }) {
+  const latest = candles.at(-1)
+  const option = {
+    animationDuration: 420,
+    grid: { left: 12, right: 12, top: 24, bottom: candles.length > 10 ? 66 : 38, containLabel: true },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      axisPointer: { type: 'cross' },
+      backgroundColor: '#172021',
+      borderColor: '#344041',
+      textStyle: { color: '#edf2ef' },
+      formatter: (params: Array<{ axisValue: string; data: number[]; dataIndex: number }>) => {
+        const candle = candles[params[0]?.dataIndex]
+        if (!candle) return ''
+        return `<b>${params[0].axisValue}</b><br/>开 ${signed(candle.open)}&nbsp;&nbsp;收 ${signed(candle.close)}<br/>高 ${signed(candle.high)}&nbsp;&nbsp;低 ${signed(candle.low)}<br/>周期净变化 ${signed(candle.change)} kcal`
+      }
+    },
+    xAxis: {
+      type: 'category',
+      data: candles.map((candle) => candle.label),
+      boundaryGap: true,
+      axisLine: { lineStyle: { color: '#344041' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#7f8a8b', fontSize: 10, hideOverlap: true }
+    },
+    yAxis: {
+      scale: true,
+      splitNumber: 4,
+      axisLabel: { color: '#7f8a8b', fontSize: 10, formatter: (value: number) => `${Math.round(value)}` },
+      splitLine: { lineStyle: { color: '#202829', type: 'dashed' } }
+    },
+    dataZoom: candles.length > 10 ? [
+      { type: 'inside', startValue: Math.max(0, candles.length - 10), endValue: candles.length - 1 },
+      { type: 'slider', height: 18, bottom: 12, borderColor: '#273032', backgroundColor: '#111718', fillerColor: 'rgba(32,213,141,.15)', handleStyle: { color: '#20d58d' }, textStyle: { color: '#697374' } }
+    ] : [],
+    series: [{
+      type: 'candlestick',
+      data: candles.map((candle) => [candle.open, candle.close, candle.low, candle.high]),
+      barMaxWidth: 24,
+      itemStyle: {
+        color: '#ed3c55',
+        color0: '#20d58d',
+        borderColor: '#ed3c55',
+        borderColor0: '#20d58d',
+        borderWidth: 1.5
+      }
+    }]
+  }
+
+  return <section className="kline-card">
+    <div className="kline-head">
+      <div><span>累计热量指数</span><strong className={(latest?.change ?? 0) <= 0 ? 'positive' : 'negative'}>{latest ? signed(latest.close) : '—'} <small>kcal</small></strong></div>
+      <div className="period-tabs" aria-label="K线周期">
+        {([['day', '日K'], ['week', '周K'], ['month', '月K']] as const).map(([value, label]) => <button key={value} className={period === value ? 'active' : ''} onClick={() => onPeriodChange(value)}>{label}</button>)}
+      </div>
+    </div>
+    {candles.length ? <ReactEChartsCore echarts={echarts} option={option} style={{ height: 340 }} notMerge /> : <div className="chart-empty"><strong>暂无可绘制行情</strong><span>添加至少一条热量流水后生成 K 线</span></div>}
+    <div className="kline-legend"><span><i className="red" />余额上升</span><span><i className="green" />赤字扩大</span><small>{candles.length} 根K线</small></div>
+    <p className="kline-note">开/收为周期首尾累计余额，高/低为周期内累计峰谷；仅统计有流水的日期。</p>
+  </section>
 }
 
 function MonthView({ days, target, onSelect }: { days: ReturnType<typeof summarizeRange>; target: number; onSelect: (date: string) => void }) {

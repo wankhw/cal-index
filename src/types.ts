@@ -23,3 +23,16 @@ export interface DaySummary {
   expenditure: number
   balance: number
 }
+
+export type CandlePeriod = 'day' | 'week' | 'month'
+
+export interface CalorieCandle {
+  key: string
+  label: string
+  open: number
+  close: number
+  low: number
+  high: number
+  change: number
+  days: number
+}

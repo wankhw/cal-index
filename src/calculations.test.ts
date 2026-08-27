@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateStreak, summarizeDay } from './calculations'
+import { buildCandles, calculateStreak, summarizeDay } from './calculations'
 import type { Entry } from './types'
 
 const entries: Entry[] = [
@@ -15,5 +15,16 @@ describe('calorie calculations', () => {
 
   it('counts completed qualifying days only', () => {
     expect(calculateStreak(entries, 1600, 500, '2026-08-27')).toBe(2)
+  })
+
+  it('builds cumulative weekly OHLC candles from recorded days', () => {
+    const days = [
+      summarizeDay('2026-08-25', entries, 1600),
+      summarizeDay('2026-08-26', entries, 1600)
+    ]
+    expect(buildCandles(days, 'week')).toEqual([{
+      key: '2026-08-24', label: '8/24周', open: 0, close: -1200,
+      low: -1200, high: 0, change: -1200, days: 2
+    }])
   })
 })
